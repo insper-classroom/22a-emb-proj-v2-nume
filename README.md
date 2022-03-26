@@ -57,13 +57,19 @@ Quais os feedbacks que seu controle vai fornecer ao usuário?
 ## In/OUT (3 pts)
 
 In: Pressionar números de 0 a 9 no teclado matricial
+
 Out: O respectivo número é digitado e aparece na tela
 
+
 In: Pressionar botão "A" no teclado matricial
+
 Out: O caracter "+" é digitado e aparece na tela
 
+
 In: Pressionar botão "B" no teclado matricial
+
 Out: O caracter "-" é digitado e aparece na tela
+
 
 
 * In: Pressionar botão "C" no teclado matricial
