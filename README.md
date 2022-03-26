@@ -56,7 +56,7 @@ Quais os feedbacks que seu controle vai fornecer ao usuário?
 
 ## In/OUT (3 pts)
 
-In: Pressionar números de 0 a 9 no teclado matricial \n
+In: Pressionar números de 0 a 9 no teclado matricial <\n>
 Out: O respectivo número é digitado e aparece na tela
 
 
