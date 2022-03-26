@@ -56,30 +56,12 @@ Quais os feedbacks que seu controle vai fornecer ao usuário?
 
 ## In/OUT (3 pts)
 
-In: Pressionar números de 0 a 9 no teclado matricial <\n>
-Out: O respectivo número é digitado e aparece na tela
-
-
-In: Pressionar botão "A" no teclado matricial
-
-Out: O caracter "+" é digitado e aparece na tela
-
-
-In: Pressionar botão "B" no teclado matricial
-
-Out: O caracter "-" é digitado e aparece na tela
-
-
-
-* In: Pressionar botão "C" no teclado matricial
-* Out: Corresponde à operação "delete" no computador
-
-
-* In: Pressionar botão "D" no teclado matricial
-* Out: Corresponde à operação "enter" no computador
-
-* In: Subir/Descer a barra do potenciômetro
-* Out: O volume do computador aumenta, conforme subimos e diminui conforme descemos a barra.
+* IN: Pressionar números de 0 a 9 no teclado matricial. OUT: O respectivo número é digitado e aparece na tela
+* IN: Pressionar botão "A" no teclado matricial. OUT: O caracter "+" é digitado e aparece na tela
+* IN: Pressionar botão "B" no teclado matricial. OUT: O caracter "-" é digitado e aparece na tela
+* IN: Pressionar botão "C" no teclado matricial. OUT: Corresponde à operação "delete" no computador
+* IN: Pressionar botão "D" no teclado matricial. OUT: Corresponde à operação "enter" no computador
+* IN: Subir/Descer a barra do potenciômetro. OUT: O volume do computador aumenta, conforme subimos e diminui conforme descemos a barra.
 
 ### Design (2 pts)
 
