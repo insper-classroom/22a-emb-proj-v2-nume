@@ -46,7 +46,8 @@ Quais os feedbacks que seu controle vai fornecer ao usuário?
 ### Comandos
 
 * Digitar números de 0 a 9;
-* Escrever os caracteres "+", "-", "," e ".";
+* Escrever os caracteres "+", "-".
+* Apertar "enter" e "delete".
 * Controlar volume.
 
 ### Feedbacks
