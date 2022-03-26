@@ -67,5 +67,6 @@ Quais os feedbacks que seu controle vai fornecer ao usuário?
 
 ### Design (2 pts)
 
-![prototipo](https://user-images.githubusercontent.com/63075579/160220936-f2a59dae-565e-49f5-8871-b1ebb1b3e343.jpeg)
+![prototipo](https://user-images.githubusercontent.com/63075579/160221046-f0ff3648-65c4-4a96-a792-e78e4d189e61.jpeg)
+
 
