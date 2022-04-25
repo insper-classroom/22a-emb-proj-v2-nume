@@ -8,6 +8,7 @@
 #include <asf.h>
 #include "conf_board.h"
 #include <string.h>
+#include "keypad_LabArqComp.h"
 
 /************************************************************************/
 /* defines                                                              */
@@ -201,7 +202,7 @@ int hc05_init(void) {
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
 	usart_send_command(USART_COM, buffer_rx, 1000, "AT", 100);
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
-	usart_send_command(USART_COM, buffer_rx, 1000, "AT+NAMEnume", 100);
+	usart_send_command(USART_COM, buffer_rx, 1000, "AT+NAMEnumev2", 100);
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
 	usart_send_command(USART_COM, buffer_rx, 1000, "AT", 100);
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
@@ -260,6 +261,8 @@ int main(void) {
 	/* Initialize the SAM system */
 	sysclk_init();
 	board_init();
+	
+	keypad_init();
 
 	configure_console();
 
@@ -269,7 +272,13 @@ int main(void) {
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
-	while(1){}
+	while(1){
+		
+		char lido = le_keypad();
+		//if (lido != NULL)
+			//printf("lido %c \n", lido);
+		
+	}
 
 	/* Will only get here if there was insufficient memory to create the idle task. */
 	return 0;
