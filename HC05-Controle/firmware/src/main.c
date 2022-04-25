@@ -227,23 +227,18 @@ void task_bluetooth(void) {
 	// configura LEDs e Botões
 	io_init();
 
-	char button1 = '0';
 	char eof = 'X';
+	
 
 	// Task não deve retornar.
 	while(1) {
-		// atualiza valor do botão
-		if(pio_get(BUT_PIO, PIO_INPUT, BUT_IDX_MASK) == 0) {
-			button1 = '1';
-		} else {
-			button1 = '0';
-		}
+		char lido = le_keypad();
 
 		// envia status botão
 		while(!usart_is_tx_ready(USART_COM)) {
 			vTaskDelay(10 / portTICK_PERIOD_MS);
 		}
-		usart_write(USART_COM, button1);
+		usart_write(USART_COM, lido);
 		
 		// envia fim de pacote
 		while(!usart_is_tx_ready(USART_COM)) {
