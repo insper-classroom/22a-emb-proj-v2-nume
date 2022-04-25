@@ -1118,12 +1118,6 @@
     <Compile Include="src\keypad_LabArqComp.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\lcd_LabArqComp.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\lcd_LabArqComp.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="src\main.c">
       <SubType>compile</SubType>
     </Compile>

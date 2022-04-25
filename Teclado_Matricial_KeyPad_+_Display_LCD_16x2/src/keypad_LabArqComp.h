@@ -49,11 +49,6 @@
 #define KEY_COL_4_IDX			20
 #define KEY_COL_4_IDX_MASK (1 << KEY_COL_4_IDX)
 
-
-
-void keypad_init(void);
-char le_keypad(void);
-
 #endif
 
 
