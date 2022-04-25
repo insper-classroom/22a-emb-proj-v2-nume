@@ -47,6 +47,9 @@
 #define TASK_BLUETOOTH_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_BLUETOOTH_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
+#define TASK_PAD_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
+#define TASK_PAD_STACK_PRIORITY        (tskIDLE_PRIORITY)
+
 /************************************************************************/
 /* prototypes                                                           */
 /************************************************************************/
@@ -253,6 +256,22 @@ void task_bluetooth(void) {
 	}
 }
 
+
+
+void task_pad(void) {
+	printf("Task Pad started \n");
+	
+	while(1) {
+		char lido = le_keypad(); 
+		if (lido != NULL)
+			printf("lido %c \n", lido);
+		vTaskDelay(10 / portTICK_PERIOD_MS);
+			
+	}
+	
+}
+
+
 /************************************************************************/
 /* main                                                                 */
 /************************************************************************/
@@ -268,17 +287,12 @@ int main(void) {
 
 	/* Create task to make led blink */
 	xTaskCreate(task_bluetooth, "BLT", TASK_BLUETOOTH_STACK_SIZE, NULL,	TASK_BLUETOOTH_STACK_PRIORITY, NULL);
+	xTaskCreate(task_pad, "PAD", TASK_PAD_STACK_SIZE, NULL,	TASK_PAD_STACK_PRIORITY, NULL);
 
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
-	while(1){
-		
-		char lido = le_keypad();
-		//if (lido != NULL)
-			//printf("lido %c \n", lido);
-		
-	}
+	while(1){}
 
 	/* Will only get here if there was insufficient memory to create the idle task. */
 	return 0;
