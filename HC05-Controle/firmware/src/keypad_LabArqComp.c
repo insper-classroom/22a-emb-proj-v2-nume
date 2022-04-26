@@ -38,7 +38,7 @@ void keypad_init()
 
 char le_keypad()
 {
-	char lido = 'X';
+	char lido = '\0';
 	
 	pio_clear(KEY_LIN_1, KEY_LIN_1_IDX_MASK);
 	pio_set(KEY_LIN_2, KEY_LIN_2_IDX_MASK);

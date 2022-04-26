@@ -40,6 +40,10 @@
 #define USART_COM_ID ID_USART0
 #endif
 
+typedef struct {
+	char lido;
+	} padData;
+
 /************************************************************************/
 /* RTOS                                                                 */
 /************************************************************************/
@@ -72,6 +76,8 @@ extern void xPortSysTickHandler(void);
 /************************************************************************/
 /* RTOS application HOOK                                                */
 /************************************************************************/
+
+QueueHandle_t xQueuePad;
 
 /* Called if stack overflow during execution */
 extern void vApplicationStackOverflowHook(xTaskHandle *pxTask,
@@ -106,6 +112,9 @@ extern void vApplicationMallocFailedHook(void) {
 /************************************************************************/
 /* handlers / callbacks                                                 */
 /************************************************************************/
+
+void callback_pad() {
+}
 
 /************************************************************************/
 /* funcoes                                                              */
@@ -226,42 +235,38 @@ void task_bluetooth(void) {
 
 	// configura LEDs e Botões
 	io_init();
-
+	
+	char lido;
 	char eof = 'X';
 	
+	for (;;) {
+		if (xQueueReceive(xQueuePad, &lido, (TickType_t) 500)) {
+			// envia status botão
+			while(!usart_is_tx_ready(USART_COM)) {
+				vTaskDelay(10 / portTICK_PERIOD_MS);
+			}
+			usart_write(USART_COM, lido);
+			
+			// envia fim de pacote
+			while(!usart_is_tx_ready(USART_COM)) {
+				vTaskDelay(10 / portTICK_PERIOD_MS);
+			}
+			usart_write(USART_COM, eof);
 
-	// Task não deve retornar.
-	while(1) {
-		char lido = le_keypad();
-
-		// envia status botão
-		while(!usart_is_tx_ready(USART_COM)) {
-			vTaskDelay(10 / portTICK_PERIOD_MS);
+			
 		}
-		usart_write(USART_COM, lido);
-		
-		// envia fim de pacote
-		while(!usart_is_tx_ready(USART_COM)) {
-			vTaskDelay(10 / portTICK_PERIOD_MS);
-		}
-		usart_write(USART_COM, eof);
-
-		// dorme por 500 ms
-		vTaskDelay(500 / portTICK_PERIOD_MS);
 	}
+	
 }
 
 
-
 void task_pad(void) {
-	printf("Task Pad started \n");
-	
 	while(1) {
-		char lido = le_keypad(); 
-		if (lido != NULL)
-			printf("lido %c \n", lido);
-		vTaskDelay(10 / portTICK_PERIOD_MS);
-			
+		padData data;
+		data.lido = le_keypad();
+		if (data.lido != NULL){
+			xQueueSendFromISR(xQueuePad, &data, 0);
+		}
 	}
 	
 }
@@ -280,14 +285,18 @@ int main(void) {
 
 	configure_console();
 
-	/* Create task to make led blink */
+	/* Create task */
 	xTaskCreate(task_bluetooth, "BLT", TASK_BLUETOOTH_STACK_SIZE, NULL,	TASK_BLUETOOTH_STACK_PRIORITY, NULL);
 	xTaskCreate(task_pad, "PAD", TASK_PAD_STACK_SIZE, NULL,	TASK_PAD_STACK_PRIORITY, NULL);
+	
+	xQueuePad = xQueueCreate(100, sizeof(padData)); 
 
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
-	while(1){}
+	while(1){
+		
+	}
 
 	/* Will only get here if there was insufficient memory to create the idle task. */
 	return 0;
