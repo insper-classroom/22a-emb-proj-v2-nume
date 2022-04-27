@@ -14,6 +14,16 @@
 /* defines                                                              */
 /************************************************************************/
 
+//#define DEBUG_SERIAL
+
+#ifdef DEBUG_SERIAL
+#define USART_COM USART1
+#define USART_COM_ID ID_USART1
+#else
+#define USART_COM USART0
+#define USART_COM_ID ID_USART0
+#endif
+
 // LEDs
 #define LED_PIO      PIOC
 #define LED_PIO_ID   ID_PIOC
@@ -26,33 +36,24 @@
 #define BUT_IDX      11
 #define BUT_IDX_MASK (1 << BUT_IDX)
 
-// usart (bluetooth ou serial)
-// Descomente para enviar dados
-// pela serial debug
-
-//#define DEBUG_SERIAL
-
-#ifdef DEBUG_SERIAL
-#define USART_COM USART1
-#define USART_COM_ID ID_USART1
-#else
-#define USART_COM USART0
-#define USART_COM_ID ID_USART0
-#endif
-
-typedef struct {
-	char lido;
-	} padData;
+// Potenciometro
+#define AFEC_POT AFEC1
+#define AFEC_POT_ID ID_AFEC1
+#define AFEC_POT_CHANNEL 1 // Canal do pino PD30
 
 /************************************************************************/
 /* RTOS                                                                 */
 /************************************************************************/
-
 #define TASK_BLUETOOTH_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_BLUETOOTH_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
 #define TASK_PAD_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_PAD_STACK_PRIORITY        (tskIDLE_PRIORITY)
+
+#define TASK_ADC_STACK_SIZE (1024*10 / sizeof(portSTACK_TYPE))
+#define TASK_ADC_STACK_PRIORITY (tskIDLE_PRIORITY)
+#define TASK_PRO_STACK_SIZE (1024*10 / sizeof(portSTACK_TYPE))
+#define TASK_PRO_STACK_PRIORITY (tskIDLE_PRIORITY)
 
 /************************************************************************/
 /* prototypes                                                           */
@@ -64,6 +65,9 @@ extern void vApplicationIdleHook(void);
 extern void vApplicationTickHook(void);
 extern void vApplicationMallocFailedHook(void);
 extern void xPortSysTickHandler(void);
+void TC_init(Tc *TC, int ID_TC, int TC_CHANNEL, int freq);
+static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel, afec_callback_t callback);
+static void configure_console(void);
 
 /************************************************************************/
 /* constants                                                            */
@@ -76,8 +80,17 @@ extern void xPortSysTickHandler(void);
 /************************************************************************/
 /* RTOS application HOOK                                                */
 /************************************************************************/
-
 QueueHandle_t xQueuePad;
+QueueHandle_t xQueueADC;
+QueueHandle_t xQueuePRO;
+
+typedef struct {
+	char lido;
+} padData;
+
+typedef struct {
+	uint value;
+} adcData;
 
 /* Called if stack overflow during execution */
 extern void vApplicationStackOverflowHook(xTaskHandle *pxTask,
@@ -113,7 +126,24 @@ extern void vApplicationMallocFailedHook(void) {
 /* handlers / callbacks                                                 */
 /************************************************************************/
 
-void callback_pad() {
+void TC1_Handler(void) {
+	volatile uint32_t ul_dummy;
+
+	ul_dummy = tc_get_status(TC0, 1);
+
+	/* Avoid compiler warning */
+	UNUSED(ul_dummy);
+
+	/* Selecina canal e inicializa conversão */
+	afec_channel_enable(AFEC_POT, AFEC_POT_CHANNEL);
+	afec_start_software_conversion(AFEC_POT);
+}
+
+static void AFEC_pot_Callback(void) {
+	adcData adc;
+	adc.value = afec_channel_get_value(AFEC_POT, AFEC_POT_CHANNEL);
+	BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+	xQueueSendFromISR(xQueuePRO, &adc, &xHigherPriorityTaskWoken);
 }
 
 /************************************************************************/
@@ -222,6 +252,90 @@ int hc05_init(void) {
 	vTaskDelay( 500 / portTICK_PERIOD_MS);
 }
 
+static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel,
+                            afec_callback_t callback) {
+  /*************************************
+   * Ativa e configura AFEC
+   *************************************/
+  /* Ativa AFEC - 0 */
+  afec_enable(afec);
+
+  /* struct de configuracao do AFEC */
+  struct afec_config afec_cfg;
+
+  /* Carrega parametros padrao */
+  afec_get_config_defaults(&afec_cfg);
+
+  /* Configura AFEC */
+  afec_init(afec, &afec_cfg);
+
+  /* Configura trigger por software */
+  afec_set_trigger(afec, AFEC_TRIG_SW);
+
+  /*** Configuracao específica do canal AFEC ***/
+  struct afec_ch_config afec_ch_cfg;
+  afec_ch_get_config_defaults(&afec_ch_cfg);
+  afec_ch_cfg.gain = AFEC_GAINVALUE_0;
+  afec_ch_set_config(afec, afec_channel, &afec_ch_cfg);
+
+  /*
+  * Calibracao:
+  * Because the internal ADC offset is 0x200, it should cancel it and shift
+  down to 0.
+  */
+  afec_channel_set_analog_offset(afec, afec_channel, 0x200);
+
+  /***  Configura sensor de temperatura ***/
+  struct afec_temp_sensor_config afec_temp_sensor_cfg;
+
+  afec_temp_sensor_get_config_defaults(&afec_temp_sensor_cfg);
+  afec_temp_sensor_set_config(afec, &afec_temp_sensor_cfg);
+
+  /* configura IRQ */
+  afec_set_callback(afec, afec_channel, callback, 1);
+  NVIC_SetPriority(afec_id, 4);
+  NVIC_EnableIRQ(afec_id);
+}
+
+void TC_init(Tc *TC, int ID_TC, int TC_CHANNEL, int freq) {
+  uint32_t ul_div;
+  uint32_t ul_tcclks;
+  uint32_t ul_sysclk = sysclk_get_cpu_hz();
+
+  pmc_enable_periph_clk(ID_TC);
+
+  tc_find_mck_divisor(freq, ul_sysclk, &ul_div, &ul_tcclks, ul_sysclk);
+  tc_init(TC, TC_CHANNEL, ul_tcclks | TC_CMR_CPCTRG);
+  tc_write_rc(TC, TC_CHANNEL, (ul_sysclk / ul_div) / freq);
+
+  NVIC_SetPriority((IRQn_Type)ID_TC, 4);
+  NVIC_EnableIRQ((IRQn_Type)ID_TC);
+  tc_enable_interrupt(TC, TC_CHANNEL, TC_IER_CPCS);
+}
+
+/************************************************************************/
+/* handlers / callbacks                                                 */
+/************************************************************************/
+
+void TC1_Handler(void) {
+	volatile uint32_t ul_dummy;
+
+	ul_dummy = tc_get_status(TC0, 1);
+
+	/* Avoid compiler warning */
+	UNUSED(ul_dummy);
+
+	/* Selecina canal e inicializa conversão */
+	afec_channel_enable(AFEC_POT, AFEC_POT_CHANNEL);
+	afec_start_software_conversion(AFEC_POT);
+}
+
+static void AFEC_pot_Callback(void) {
+	adcData adc;
+	adc.value = afec_channel_get_value(AFEC_POT, AFEC_POT_CHANNEL);
+	BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+	xQueueSendFromISR(xQueuePRO, &adc, &xHigherPriorityTaskWoken);
+}
 /************************************************************************/
 /* TASKS                                                                */
 /************************************************************************/
@@ -252,8 +366,6 @@ void task_bluetooth(void) {
 				vTaskDelay(10 / portTICK_PERIOD_MS);
 			}
 			usart_write(USART_COM, eof);
-
-			
 		}
 	}
 	
@@ -271,6 +383,43 @@ void task_pad(void) {
 	
 }
 
+static void task_adc(void *pvParameters) {
+	int mean;
+	while (1) {
+		if (xQueueReceive(xQueueADC, &(mean), 1000)) {
+			printf("mean: %d \n", mean);
+		}
+	}
+}
+
+static void task_pro(void *pvParameters) {
+	config_AFEC_pot(AFEC_POT, AFEC_POT_ID, AFEC_POT_CHANNEL, AFEC_pot_Callback);
+	TC_init(TC0, ID_TC1, 1, 10);
+	tc_start(TC0, 1);
+
+	// variável para receber dados da fila
+	adcData adc;
+	int mean;
+	int i = 0;
+	int sum = 0;
+
+	while (1) {
+		if (xQueueReceive(xQueuePRO, &(adc), 1000)) {
+			if(i == 10) {
+				mean = sum/i;
+				xQueueSend(xQueueADC, &mean, 10);
+				sum = 0;
+				i = 0;
+				}else{
+				sum += adc.value;
+				i++;
+			}
+
+			}else{
+			printf("nao chegou dado em 1s");
+		}
+	}
+}
 
 /************************************************************************/
 /* main                                                                 */
@@ -290,6 +439,24 @@ int main(void) {
 	xTaskCreate(task_pad, "PAD", TASK_PAD_STACK_SIZE, NULL,	TASK_PAD_STACK_PRIORITY, NULL);
 	
 	xQueuePad = xQueueCreate(100, sizeof(padData)); 
+	
+	xQueueADC = xQueueCreate(100, sizeof(adcData));
+	if (xQueueADC == NULL)
+	printf("falha em criar a queue xQueueADC \n");
+	  
+	xQueuePRO = xQueueCreate(100, sizeof(adcData));
+	if (xQueuePRO == NULL)
+	printf("falha em criar a queue xQueuePRO \n");
+	  
+	if (xTaskCreate(task_adc, "ADC", TASK_ADC_STACK_SIZE, NULL,
+	TASK_ADC_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create test ADC task\r\n");
+	}
+	  
+	if (xTaskCreate(task_pro, "PRO", TASK_PRO_STACK_SIZE, NULL,
+	TASK_PRO_STACK_PRIORITY, NULL) != pdPASS) {
+		printf("Failed to create test ADC task\r\n");
+	}
 
 	/* Start the scheduler. */
 	vTaskStartScheduler();
