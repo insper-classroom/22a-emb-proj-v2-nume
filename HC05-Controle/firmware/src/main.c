@@ -313,29 +313,28 @@ void TC_init(Tc *TC, int ID_TC, int TC_CHANNEL, int freq) {
   tc_enable_interrupt(TC, TC_CHANNEL, TC_IER_CPCS);
 }
 
-/************************************************************************/
-/* handlers / callbacks                                                 */
-/************************************************************************/
-
-void TC1_Handler(void) {
-	volatile uint32_t ul_dummy;
-
-	ul_dummy = tc_get_status(TC0, 1);
-
-	/* Avoid compiler warning */
-	UNUSED(ul_dummy);
-
-	/* Selecina canal e inicializa conversão */
-	afec_channel_enable(AFEC_POT, AFEC_POT_CHANNEL);
-	afec_start_software_conversion(AFEC_POT);
+void package_send(char head, char payload, char eop) {
+	// envia head botão
+	while(!usart_is_tx_ready(USART_COM)) {
+		vTaskDelay(10 / portTICK_PERIOD_MS);
+	}
+	usart_write(USART_COM, head);
+	
+	// envia status botão
+	while(!usart_is_tx_ready(USART_COM)) {
+		vTaskDelay(10 / portTICK_PERIOD_MS);
+	}
+	usart_write(USART_COM, payload);
+	
+	// envia fim de pacote
+	while(!usart_is_tx_ready(USART_COM)) {
+		vTaskDelay(10 / portTICK_PERIOD_MS);
+	}
+	usart_write(USART_COM, eop);
+	
+	
 }
 
-static void AFEC_pot_Callback(void) {
-	adcData adc;
-	adc.value = afec_channel_get_value(AFEC_POT, AFEC_POT_CHANNEL);
-	BaseType_t xHigherPriorityTaskWoken = pdTRUE;
-	xQueueSendFromISR(xQueuePRO, &adc, &xHigherPriorityTaskWoken);
-}
 /************************************************************************/
 /* TASKS                                                                */
 /************************************************************************/
@@ -350,22 +349,19 @@ void task_bluetooth(void) {
 	// configura LEDs e Botões
 	io_init();
 	
+	char pad_head = 'K';
+	char vol_head = 'V';
 	char lido;
+	adcData adc;
 	char eof = 'X';
 	
 	for (;;) {
 		if (xQueueReceive(xQueuePad, &lido, (TickType_t) 500)) {
-			// envia status botão
-			while(!usart_is_tx_ready(USART_COM)) {
-				vTaskDelay(10 / portTICK_PERIOD_MS);
-			}
-			usart_write(USART_COM, lido);
-			
-			// envia fim de pacote
-			while(!usart_is_tx_ready(USART_COM)) {
-				vTaskDelay(10 / portTICK_PERIOD_MS);
-			}
-			usart_write(USART_COM, eof);
+			package_send(pad_head, lido, eof);
+		}
+		
+		if (xQueueReceive(xQueueADC, &adc, (TickType_t) 500)) {
+			package_send(vol_head, adc.value >> 4, eof);
 		}
 	}
 	
@@ -378,17 +374,20 @@ void task_pad(void) {
 		data.lido = le_keypad();
 		if (data.lido != NULL){
 			xQueueSendFromISR(xQueuePad, &data, 0);
+			printf("Lido: %c\n", data.lido);
 		}
 	}
 	
 }
 
+
 static void task_adc(void *pvParameters) {
 	int mean;
 	while (1) {
+		/*
 		if (xQueueReceive(xQueueADC, &(mean), 1000)) {
 			printf("mean: %d \n", mean);
-		}
+		}*/
 	}
 }
 
