@@ -3,10 +3,48 @@ import serial
 import argparse
 import time
 import logging
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+import math
+
+volume2decibal = {
+            0.00:     -51,
+            0.05:     -40,
+            0.10:     -30.848,
+            0.15:     -26,
+            0.20:     -22.477,
+            0.25:     -20,
+            0.30:     -17.111,
+            0.35:     -15,
+            0.40:     -13.152,
+            0.45:     -11,
+            0.50:     -10.015,
+            0.55:     -8.5,
+            0.60:     -7.415,
+            0.65:     -6,
+            0.70:     -4.991,
+            0.75:     -4,
+            0.80:     -3.26,
+            0.85:     -2,
+            0.90:     -1.381,
+            0.95:     -0.6,
+            1:        0
+        }
 
 class MyControllerMap:
     def __init__(self):
         self.button = {'1': '1'} # Fast forward (10 seg) pro Youtube
+
+class VolumeController:
+    def __init__(self):
+        # Get default audio device using PyCAW
+        self.devices = AudioUtilities.GetSpeakers()
+        self.interface = self.devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        self.volume = cast(self.interface, POINTER(IAudioEndpointVolume))
+        
+    def updateVolume(self, db):
+        self.volume.SetMasterVolumeLevel(db, None)
 
 class SerialControllerInterface:
     # Protocolo
@@ -17,7 +55,14 @@ class SerialControllerInterface:
         self.ser = serial.Serial(port, baudrate=baudrate)
         self.mapping = MyControllerMap()
         self.incoming = '0'
+        self.handshake_sent = 0
         pyautogui.PAUSE = 0  ## remove delay
+
+    def handshake(self):
+        if self.handshake_sent == 0:
+            x = 'S'
+            self.ser.write(x.encode('ascii'))
+            self.handshake_sent = 1
     
     def update(self):
         ## Sync protocol
@@ -113,8 +158,12 @@ class SerialControllerInterface:
                 pyautogui.keyUp('#')
 
         if head == b'V':
+            volController = VolumeController()
             data = self.ser.read() 
-            volume = int.from_bytes(data, 'big')
+            data_volume = int.from_bytes(data, 'big')
+            bytes_volume_norm =round((0.05 * round((data_volume / 255)/0.05)),2)
+            volume = volume2decibal[bytes_volume_norm]
+            volController.updateVolume(volume)
 
             print(volume)
 
@@ -151,4 +200,5 @@ if __name__ == '__main__':
         controller = SerialControllerInterface(port=args.serial_port, baudrate=args.baudrate)
 
     while True:
+        controller.handshake()
         controller.update()

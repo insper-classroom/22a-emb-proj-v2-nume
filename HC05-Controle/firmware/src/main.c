@@ -36,6 +36,24 @@
 #define BUT_IDX      11
 #define BUT_IDX_MASK (1 << BUT_IDX)
 
+// LEDs
+#define LED_PIO      PIOC
+#define LED_PIO_ID   ID_PIOC
+#define LED_IDX      8
+#define LED_IDX_MASK (1 << LED_IDX)
+
+// Botão
+#define BUT_PIO      PIOA
+#define BUT_PIO_ID   ID_PIOA
+#define BUT_IDX      11
+#define BUT_IDX_MASK (1 << BUT_IDX)
+
+// LED_verde
+#define LED_PIO_GREEN      PIOD
+#define LED_PIO_GREEN_ID   ID_PIOD
+#define LED_GREEN_IDX      22
+#define LED_GREEN_IDX_MASK (1 << LED_GREEN_IDX)
+
 // Potenciometro
 #define AFEC_POT AFEC1
 #define AFEC_POT_ID ID_AFEC1
@@ -44,6 +62,9 @@
 /************************************************************************/
 /* RTOS                                                                 */
 /************************************************************************/
+#define TASK_HANDSHAKE_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
+#define TASK_HANDSHAKE_STACK_PRIORITY        (tskIDLE_PRIORITY)
+
 #define TASK_BLUETOOTH_STACK_SIZE            (4096/sizeof(portSTACK_TYPE))
 #define TASK_BLUETOOTH_STACK_PRIORITY        (tskIDLE_PRIORITY)
 
@@ -68,6 +89,8 @@ extern void xPortSysTickHandler(void);
 void TC_init(Tc *TC, int ID_TC, int TC_CHANNEL, int freq);
 static void config_AFEC_pot(Afec *afec, uint32_t afec_id, uint32_t afec_channel, afec_callback_t callback);
 static void configure_console(void);
+static void task_bluetooth(void);
+static void pin_toggle(Pio *pio, uint32_t mask);
 
 /************************************************************************/
 /* constants                                                            */
@@ -77,12 +100,15 @@ static void configure_console(void);
 /* variaveis globais                                                    */
 /************************************************************************/
 
+
 /************************************************************************/
 /* RTOS application HOOK                                                */
 /************************************************************************/
 QueueHandle_t xQueuePad;
 QueueHandle_t xQueueADC;
 QueueHandle_t xQueuePRO;
+
+TaskHandle_t xHandlerHandShake;
 
 typedef struct {
 	char lido;
@@ -114,7 +140,7 @@ extern void vApplicationTickHook(void) { }
 extern void vApplicationMallocFailedHook(void) {
 	/* Called if a call to pvPortMalloc() fails because there is insufficient
 	free memory available in the FreeRTOS heap.  pvPortMalloc() is called
-	internally by FreeRTOS API functions that create tasks, queues, software
+	internally by FreeRTOS API functions that create tasks, queues, s oftware
 	timers, and semaphores.  The size of the FreeRTOS heap is set by the
 	configTOTAL_HEAP_SIZE configuration constant in FreeRTOSConfig.h. */
 
@@ -154,11 +180,18 @@ void io_init(void) {
 
 	// Ativa PIOs
 	pmc_enable_periph_clk(LED_PIO_ID);
+	pmc_enable_periph_clk(LED_PIO_GREEN_ID);
 	pmc_enable_periph_clk(BUT_PIO_ID);
 
 	// Configura Pinos
 	pio_configure(LED_PIO, PIO_OUTPUT_0, LED_IDX_MASK, PIO_DEFAULT | PIO_DEBOUNCE);
+	pio_set_output(LED_PIO, LED_IDX_MASK, 1, 0, 0); 
+	
+	pio_configure(LED_PIO_GREEN, PIO_OUTPUT_0, LED_GREEN_IDX_MASK, PIO_DEFAULT | PIO_DEBOUNCE);
+	pio_set_output(LED_PIO_GREEN, LED_GREEN_IDX_MASK, 1, 0, 0);
+	
 	pio_configure(BUT_PIO, PIO_INPUT, BUT_IDX_MASK, PIO_PULLUP);
+	
 }
 
 static void configure_console(void) {
@@ -339,7 +372,30 @@ void package_send(char head, char payload, char eop) {
 /* TASKS                                                                */
 /************************************************************************/
 
+void task_handshake(void) {
+	char handshake;
+	int counter = 0;
+	
+	while(1) {
+		char rx = 0;
+		if (usart_read(USART_COM, &rx) == 0) {
+			handshake = rx;		
+		}
+		
+		if (handshake = 'S') {
+			pin_toggle(LED_PIO_GREEN, LED_GREEN_IDX_MASK);
+			printf("Nume connected.");
+			xTaskCreate(task_bluetooth, "BLT", TASK_BLUETOOTH_STACK_SIZE, NULL,	TASK_BLUETOOTH_STACK_PRIORITY, NULL);
+			
+		}
+	}
+	
+}
+
 void task_bluetooth(void) {
+	
+	vTaskDelete(xHandlerHandShake);
+	
 	printf("Task Bluetooth started \n");
 	
 	printf("Inicializando HC05 \n");
@@ -357,7 +413,9 @@ void task_bluetooth(void) {
 	
 	for (;;) {
 		if (xQueueReceive(xQueuePad, &lido, (TickType_t) 500)) {
+			pin_toggle(LED_PIO, LED_IDX_MASK);
 			package_send(pad_head, lido, eof);
+			pin_toggle(LED_PIO, LED_IDX_MASK);
 		}
 		
 		if (xQueueReceive(xQueueADC, &adc, (TickType_t) 500)) {
@@ -420,6 +478,14 @@ static void task_pro(void *pvParameters) {
 	}
 }
 
+
+void pin_toggle(Pio *pio, uint32_t mask) {
+	if(pio_get_output_data_status(pio, mask))
+	pio_clear(pio, mask);
+	else
+	pio_set(pio,mask);
+}
+
 /************************************************************************/
 /* main                                                                 */
 /************************************************************************/
@@ -434,7 +500,7 @@ int main(void) {
 	configure_console();
 
 	/* Create task */
-	xTaskCreate(task_bluetooth, "BLT", TASK_BLUETOOTH_STACK_SIZE, NULL,	TASK_BLUETOOTH_STACK_PRIORITY, NULL);
+	xTaskCreate(task_handshake, "HDS", TASK_HANDSHAKE_STACK_SIZE, NULL,	TASK_HANDSHAKE_STACK_PRIORITY, &xHandlerHandShake);
 	xTaskCreate(task_pad, "PAD", TASK_PAD_STACK_SIZE, NULL,	TASK_PAD_STACK_PRIORITY, NULL);
 	
 	xQueuePad = xQueueCreate(100, sizeof(padData)); 
